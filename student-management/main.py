@@ -1,5 +1,6 @@
-from fastapi.middleware.cors import CORSMiddleware
+
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
@@ -8,19 +9,26 @@ from models import Student, Batch
 from schemas import StudentCreate
 
 
+# Initialize FastAPI application
 app = FastAPI(
     title="Student Management API",
     description="API for managing student details",
     version="1.0.0"
 )
 
+
+# CORS Configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[
+        "http://localhost:5173",
+        "https://student-proj-management.vercel.app"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # Home API
 @app.get("/")
@@ -61,8 +69,9 @@ def create_student(
 
 # Get all students
 @app.get("/students")
-def get_students(db: Session = Depends(get_db)):
-
+def get_students(
+    db: Session = Depends(get_db)
+):
     students = db.query(Student).all()
 
     return students
@@ -70,8 +79,9 @@ def get_students(db: Session = Depends(get_db)):
 
 # Get all batches
 @app.get("/batches")
-def get_batches(db: Session = Depends(get_db)):
-
+def get_batches(
+    db: Session = Depends(get_db)
+):
     batches = db.query(Batch).all()
 
     return batches
@@ -83,7 +93,6 @@ def get_students_by_batch(
     batch_id: int,
     db: Session = Depends(get_db)
 ):
-
     students = db.query(Student).filter(
         Student.batch_id == batch_id
     ).all()
@@ -98,7 +107,6 @@ def update_student(
     student: StudentCreate,
     db: Session = Depends(get_db)
 ):
-
     existing_student = db.query(Student).filter(
         Student.student_id == student_id
     ).first()
@@ -129,6 +137,7 @@ def update_student(
         "message": "Student updated successfully",
         "student_id": existing_student.student_id
     }
+
 
 # Delete a student
 @app.delete("/students/{student_id}")
