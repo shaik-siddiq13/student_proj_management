@@ -18,14 +18,8 @@ import "./App.css";
 import API from "./api";
 
 const COLORS = [
-  "#3b82f6",
-  "#8b5cf6",
-  "#16a34a",
-  "#f59e0b",
-  "#ef4444",
-  "#06b6d4",
-  "#ec4899",
-  "#64748b"
+  "#3977D5", "#20A780", "#F0A33B", "#8B5CF6",
+  "#E35D6A", "#06B6D4", "#EC4899", "#64748B"
 ];
 
 const emptyForm = {
@@ -38,69 +32,86 @@ const emptyForm = {
 };
 
 function AnalyticsCard({ title, data, type, color }) {
-  const hasData = data.some((item) => item.count > 0);
+  const chartData = data.filter((item) => item.count > 0);
+  const total = chartData.reduce((sum, item) => sum + item.count, 0);
 
   return (
-    <div className="content-card">
+    <div className="content-card analytics-card">
       <div className="section-heading">
         <div>
           <h2>{title}</h2>
           <p>Student distribution analysis</p>
         </div>
+        <span className="analytics-total">{total} Students</span>
       </div>
 
-      {!hasData ? (
-        <p>No data available.</p>
+      {chartData.length === 0 ? (
+        <div className="no-chart-data">No data available.</div>
       ) : (
-        <div style={{ width: "100%", height: 300 }}>
+        <div className="chart-container">
           <ResponsiveContainer width="100%" height="100%">
             {type === "pie" ? (
               <PieChart>
                 <Pie
-                  data={data.filter((item) => item.count > 0)}
+                  data={chartData}
                   dataKey="count"
                   nameKey="name"
                   cx="50%"
-                  cy="45%"
-                  outerRadius={90}
-                  label={({ name, percent }) =>
-                    `${name} ${(percent * 100).toFixed(1)}%`
-                  }
+                  cy="44%"
+                  innerRadius={62}
+                  outerRadius={98}
+                  paddingAngle={4}
+                  cornerRadius={5}
+                  stroke="none"
                 >
-                  {data
-                    .filter((item) => item.count > 0)
-                    .map((item, index) => (
-                      <Cell
-                        key={item.name}
-                        fill={COLORS[index % COLORS.length]}
-                      />
-                    ))}
+                  {chartData.map((item, index) => (
+                    <Cell
+                      key={item.name}
+                      fill={COLORS[index % COLORS.length]}
+                    />
+                  ))}
                 </Pie>
-                <Tooltip />
-                <Legend />
+                <Tooltip
+                  formatter={(value, name) => [`${value} students`, name]}
+                />
+                <Legend
+                  verticalAlign="bottom"
+                  iconType="circle"
+                  wrapperStyle={{ fontSize: "12px", paddingTop: "15px" }}
+                />
               </PieChart>
             ) : (
               <BarChart
-                data={data}
-                margin={{ top: 15, right: 15, left: 0, bottom: 45 }}
+                data={chartData}
+                layout="vertical"
+                margin={{ top: 8, right: 25, left: 12, bottom: 8 }}
+                barCategoryGap="25%"
               >
-                <CartesianGrid strokeDasharray="3 3" />
+                <CartesianGrid stroke="#e9eef5" horizontal={false} />
                 <XAxis
-                  dataKey="name"
-                  angle={-25}
-                  textAnchor="end"
-                  interval={0}
-                  height={65}
-                  tick={{ fontSize: 11 }}
+                  type="number"
+                  allowDecimals={false}
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "#64748b", fontSize: 11 }}
                 />
-                <YAxis allowDecimals={false} />
-                <Tooltip />
-                <Legend />
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  width={105}
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "#334155", fontSize: 11 }}
+                />
+                <Tooltip
+                  formatter={(value) => [`${value} students`, "Students"]}
+                />
                 <Bar
                   dataKey="count"
                   name="Students"
                   fill={color}
-                  radius={[6, 6, 0, 0]}
+                  radius={[0, 8, 8, 0]}
+                  barSize={20}
                 />
               </BarChart>
             )}
@@ -114,22 +125,22 @@ function AnalyticsCard({ title, data, type, color }) {
 function App() {
   const [students, setStudents] = useState([]);
   const [batches, setBatches] = useState([]);
-
   const [formData, setFormData] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
-
-  // Student Profile
   const [selectedStudent, setSelectedStudent] = useState(null);
-
   const [searchTerm, setSearchTerm] = useState("");
   const [batchFilter, setBatchFilter] = useState("");
-
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
-
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [activeSection, setActiveSection] = useState("dashboard");
+
+  // Dashboard settings
+  const [darkMode, setDarkMode] = useState(false);
+  const [showStats, setShowStats] = useState(true);
+  const [showAnalytics, setShowAnalytics] = useState(true);
 
   useEffect(() => {
     loadInitialData();
@@ -162,11 +173,7 @@ function App() {
 
   const handleChange = (event) => {
     const { name, value } = event.target;
-
-    setFormData((previousData) => ({
-      ...previousData,
-      [name]: value
-    }));
+    setFormData((previous) => ({ ...previous, [name]: value }));
   };
 
   const resetForm = () => {
@@ -177,7 +184,6 @@ function App() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-
     setSaving(true);
     setError("");
     setNotice("");
@@ -200,15 +206,11 @@ function App() {
       await fetchStudents();
     } catch (err) {
       console.error("Error saving student:", err);
-
-      const message =
-        err.response?.data?.detail ||
-        "Unable to save student details. Please try again.";
-
+      const message = err.response?.data?.detail;
       setError(
         typeof message === "string"
           ? message
-          : "Please check the entered student details."
+          : "Unable to save student details. Please try again."
       );
     } finally {
       setSaving(false);
@@ -229,11 +231,7 @@ function App() {
 
     setError("");
     setNotice("");
-
-    document.getElementById("student-form")?.scrollIntoView({
-      behavior: "smooth",
-      block: "start"
-    });
+    navigateTo("student-form");
   };
 
   const handleDelete = async (student) => {
@@ -249,17 +247,13 @@ function App() {
 
     try {
       await API.delete(`/students/${student.student_id}`);
-
       setNotice("Student deleted successfully!");
 
-      if (editingId === student.student_id) {
-        resetForm();
-      }
+      if (editingId === student.student_id) resetForm();
 
       await fetchStudents();
     } catch (err) {
       console.error("Error deleting student:", err);
-
       setError(
         err.response?.data?.detail ||
         "Unable to delete student. Please try again."
@@ -269,14 +263,33 @@ function App() {
     }
   };
 
-  // Open student profile
-  const handleViewProfile = (student) => {
-    setSelectedStudent(student);
+  const getBatchName = (batchId) => {
+    const batch = batches.find(
+      (item) => String(item.batch_id) === String(batchId)
+    );
+
+    return batch ? batch.batch_name : `Batch ${batchId}`;
   };
 
-  // Close student profile
-  const handleCloseProfile = () => {
-    setSelectedStudent(null);
+  // Navigation between dashboard sections and Settings page
+  const navigateTo = (section) => {
+    setActiveSection(section);
+
+    if (section === "student-form" && editingId === null) {
+      setFormData(emptyForm);
+    }
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    if (section !== "settings") {
+      setTimeout(() => {
+        const element = document.getElementById(section);
+        element?.scrollIntoView({
+          behavior: "smooth",
+          block: "start"
+        });
+      }, 100);
+    }
   };
 
   const filteredStudents = useMemo(() => {
@@ -291,39 +304,30 @@ function App() {
         (student.location || "").toLowerCase().includes(search);
 
       const matchesBatch =
-        !batchFilter ||
-        String(student.batch_id) === batchFilter;
+        !batchFilter || String(student.batch_id) === batchFilter;
 
       return matchesSearch && matchesBatch;
     });
   }, [students, searchTerm, batchFilter]);
 
-  const getBatchName = (batchId) => {
-    const batch = batches.find(
-      (item) => String(item.batch_id) === String(batchId)
-    );
-
-    return batch ? batch.batch_name : `Batch ${batchId}`;
-  };
-
-  const studentsByBatch = useMemo(() => {
-    return batches.map((batch) => ({
-      name: batch.batch_name,
-      count: students.filter(
-        (student) =>
-          String(student.batch_id) === String(batch.batch_id)
-      ).length
-    }));
-  }, [students, batches]);
+  const studentsByBatch = useMemo(
+    () =>
+      batches.map((batch) => ({
+        name: batch.batch_name,
+        count: students.filter(
+          (student) =>
+            String(student.batch_id) === String(batch.batch_id)
+        ).length
+      })),
+    [students, batches]
+  );
 
   const studentsByQualification = useMemo(() => {
     const counts = {};
 
     students.forEach((student) => {
-      const qualification =
-        student.qualification?.trim() || "Not specified";
-
-      counts[qualification] = (counts[qualification] || 0) + 1;
+      const name = student.qualification?.trim() || "Not specified";
+      counts[name] = (counts[name] || 0) + 1;
     });
 
     return Object.entries(counts).map(([name, count]) => ({
@@ -336,10 +340,8 @@ function App() {
     const counts = {};
 
     students.forEach((student) => {
-      const location =
-        student.location?.trim() || "Not specified";
-
-      counts[location] = (counts[location] || 0) + 1;
+      const name = student.location?.trim() || "Not specified";
+      counts[name] = (counts[name] || 0) + 1;
     });
 
     return Object.entries(counts).map(([name, count]) => ({
@@ -349,511 +351,643 @@ function App() {
   }, [students]);
 
   return (
-    <div className="app-container">
-
-      {/* Header */}
-      <header className="header">
-        <div>
-          <h1>Student Management System</h1>
-          <p>Manage and track student information</p>
+    <div className={`app-container ${darkMode ? "dark-mode" : ""}`}>
+      <aside className="sidebar">
+        <div className="sidebar-brand">
+          <div className="brand-icon">S</div>
+          <div>
+            <h2>Student Portal</h2>
+            <p>Management System</p>
+          </div>
         </div>
 
-        <button
-          className="refresh-button"
-          type="button"
-          onClick={loadInitialData}
-          disabled={loading}
-        >
-          Refresh Data
-        </button>
-      </header>
+        <div className="sidebar-menu">
+          <p className="sidebar-label">MAIN MENU</p>
 
-      <main className="main-content">
-
-        {/* Dashboard Statistics */}
-        <section className="stats-grid">
-          <div className="stat-card">
-            <div className="stat-icon blue">ST</div>
-            <div>
-              <p>Total Students</p>
-              <h2>{students.length}</h2>
-            </div>
-          </div>
-
-          <div className="stat-card">
-            <div className="stat-icon purple">BT</div>
-            <div>
-              <p>Total Batches</p>
-              <h2>{batches.length}</h2>
-            </div>
-          </div>
-
-          <div className="stat-card">
-            <div className="stat-icon green">RS</div>
-            <div>
-              <p>Displayed Students</p>
-              <h2>{filteredStudents.length}</h2>
-            </div>
-          </div>
-        </section>
-
-        {/* Dashboard Analytics */}
-        <section style={{ marginBottom: "25px" }}>
-          <div className="section-heading">
-            <div>
-              <h2>Dashboard Analytics</h2>
-              <p>Insights into student distribution and demographics</p>
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-              gap: "20px"
-            }}
+          <button
+            className={
+              activeSection === "dashboard"
+                ? "nav-item active"
+                : "nav-item"
+            }
+            onClick={() => navigateTo("dashboard")}
           >
-            <AnalyticsCard
-              title="Students by Batch"
-              data={studentsByBatch}
-              type="pie"
-              color="#3b82f6"
-            />
+            <span className="nav-icon">▦</span> Dashboard
+          </button>
 
-            <AnalyticsCard
-              title="Students by Qualification"
-              data={studentsByQualification}
-              type="bar"
-              color="#8b5cf6"
-            />
+          <button
+            className={
+              activeSection === "analytics"
+                ? "nav-item active"
+                : "nav-item"
+            }
+            onClick={() => navigateTo("analytics")}
+          >
+            <span className="nav-icon">▥</span> Analytics
+          </button>
 
-            <AnalyticsCard
-              title="Students by Location"
-              data={studentsByLocation}
-              type="bar"
-              color="#16a34a"
-            />
+          <button
+            className={
+              activeSection === "student-form"
+                ? "nav-item active"
+                : "nav-item"
+            }
+            onClick={() => navigateTo("student-form")}
+          >
+            <span className="nav-icon">＋</span> Add Student
+          </button>
+
+          <button
+            className={
+              activeSection === "student-records"
+                ? "nav-item active"
+                : "nav-item"
+            }
+            onClick={() => navigateTo("student-records")}
+          >
+            <span className="nav-icon">☷</span> Student Records
+          </button>
+
+          <p className="sidebar-label secondary-label">PREFERENCES</p>
+
+          <button
+            className={
+              activeSection === "settings"
+                ? "nav-item active"
+                : "nav-item"
+            }
+            onClick={() => navigateTo("settings")}
+          >
+            <span className="nav-icon">⚙</span> Settings
+          </button>
+        </div>
+
+        <div className="sidebar-footer">
+          <div className="sidebar-footer-icon">S</div>
+          <div>
+            <strong>Student Portal</strong>
+            <span>Admin Dashboard</span>
           </div>
-        </section>
+        </div>
+      </aside>
 
-        {/* Notifications */}
-        {notice && (
-          <div className="alert success-alert">
-            {notice}
+      <div className="dashboard-content">
+        <header className="header">
+          <div>
+            <h1>
+              {activeSection === "settings"
+                ? "Settings"
+                : "Student Management System"}
+            </h1>
+            <p>
+              {activeSection === "settings"
+                ? "Customize your application preferences"
+                : "Manage and track student information"}
+            </p>
+          </div>
+
+          {activeSection !== "settings" && (
             <button
-              type="button"
-              onClick={() => setNotice("")}
-              aria-label="Dismiss message"
+              className="refresh-button"
+              onClick={loadInitialData}
+              disabled={loading}
             >
-              ×
+              {loading ? "Refreshing..." : "↻ Refresh Data"}
             </button>
-          </div>
-        )}
+          )}
+        </header>
 
-        {error && (
-          <div className="alert error-alert">
-            {error}
-            <button
-              type="button"
-              onClick={() => setError("")}
-              aria-label="Dismiss error"
-            >
-              ×
-            </button>
-          </div>
-        )}
-
-        {/* Add / Edit Student Form */}
-        <section className="content-card" id="student-form">
-          <div className="section-heading">
-            <div>
-              <h2>
-                {editingId !== null ? "Edit Student" : "Add New Student"}
-              </h2>
-              <p>
-                {editingId !== null
-                  ? `Updating student ID: ${editingId}`
-                  : "Enter the student information below"}
-              </p>
+        <main className="main-content">
+          {error && (
+            <div className="alert error-alert">
+              {error}
+              <button onClick={() => setError("")}>×</button>
             </div>
+          )}
 
-            {editingId !== null && (
-              <span className="editing-label">Editing</span>
-            )}
-          </div>
-
-          <form onSubmit={handleSubmit} className="student-form">
-            <div className="form-group">
-              <label htmlFor="batch_id">Batch *</label>
-              <select
-                id="batch_id"
-                name="batch_id"
-                value={formData.batch_id}
-                onChange={handleChange}
-                required
-              >
-                <option value="">Select Batch</option>
-                {batches.map((batch) => (
-                  <option key={batch.batch_id} value={batch.batch_id}>
-                    {batch.batch_name}
-                  </option>
-                ))}
-              </select>
+          {notice && (
+            <div className="alert success-alert">
+              {notice}
+              <button onClick={() => setNotice("")}>×</button>
             </div>
+          )}
 
-            <div className="form-group">
-              <label htmlFor="student_name">Student Name *</label>
-              <input
-                id="student_name"
-                type="text"
-                name="student_name"
-                placeholder="Enter student name"
-                value={formData.student_name}
-                onChange={handleChange}
-                maxLength={100}
-                required
-              />
-            </div>
+          {/* Dashboard pages */}
+          {activeSection !== "settings" && (
+            <>
+              {showStats && (
+                <section className="stats-grid" id="dashboard">
+                  <div className="stat-card">
+                    <div className="stat-icon blue">ST</div>
+                    <div>
+                      <p>Total Students</p>
+                      <h2>{students.length}</h2>
+                    </div>
+                  </div>
 
-            <div className="form-group">
-              <label htmlFor="email">Email Address *</label>
-              <input
-                id="email"
-                type="email"
-                name="email"
-                placeholder="Enter email address"
-                value={formData.email}
-                onChange={handleChange}
-                maxLength={150}
-                required
-              />
-            </div>
+                  <div className="stat-card">
+                    <div className="stat-icon purple">BT</div>
+                    <div>
+                      <p>Total Batches</p>
+                      <h2>{batches.length}</h2>
+                    </div>
+                  </div>
 
-            <div className="form-group">
-              <label htmlFor="phone">Phone Number *</label>
-              <input
-                id="phone"
-                type="tel"
-                name="phone"
-                placeholder="Enter phone number"
-                value={formData.phone}
-                onChange={handleChange}
-                maxLength={15}
-                required
-              />
-            </div>
+                  <div className="stat-card">
+                    <div className="stat-icon green">RS</div>
+                    <div>
+                      <p>Displayed Students</p>
+                      <h2>{filteredStudents.length}</h2>
+                    </div>
+                  </div>
+                </section>
+              )}
 
-            <div className="form-group">
-              <label htmlFor="qualification">Qualification *</label>
-              <input
-                id="qualification"
-                type="text"
-                name="qualification"
-                placeholder="Example: B.Tech"
-                value={formData.qualification}
-                onChange={handleChange}
-                maxLength={50}
-                required
-              />
-            </div>
+              {!showStats && <div id="dashboard" />}
 
-            <div className="form-group">
-              <label htmlFor="location">Location *</label>
-              <input
-                id="location"
-                type="text"
-                name="location"
-                placeholder="Enter city"
-                value={formData.location}
-                onChange={handleChange}
-                maxLength={100}
-                required
-              />
-            </div>
+              {showAnalytics && (
+                <section className="analytics-section" id="analytics">
+                  <div className="section-heading">
+                    <div>
+                      <h2>Dashboard Analytics</h2>
+                      <p>
+                        Insights into student distribution and demographics
+                      </p>
+                    </div>
+                  </div>
 
-            <div className="form-actions">
-              <button
-                type="submit"
-                className="primary-button"
-                disabled={saving}
-              >
-                {saving
-                  ? "Please wait..."
-                  : editingId !== null
-                    ? "Update Student"
-                    : "Add Student"}
-              </button>
+                  <div className="analytics-grid">
+                    <AnalyticsCard
+                      title="Students by Batch"
+                      data={studentsByBatch}
+                      type="pie"
+                      color="#3977D5"
+                    />
 
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={resetForm}
-              >
-                {editingId !== null ? "Cancel Edit" : "Clear Form"}
-              </button>
-            </div>
-          </form>
-        </section>
+                    <AnalyticsCard
+                      title="Students by Qualification"
+                      data={studentsByQualification}
+                      type="bar"
+                      color="#8B5CF6"
+                    />
 
-        {/* Student Records */}
-        <section className="content-card">
-          <div className="section-heading records-heading">
-            <div>
-              <h2>Student Records</h2>
-              <p>View, search, filter and manage student details</p>
-            </div>
-          </div>
+                    <AnalyticsCard
+                      title="Students by Location"
+                      data={studentsByLocation}
+                      type="bar"
+                      color="#20A780"
+                    />
+                  </div>
+                </section>
+              )}
 
-          {/* Search and Filter */}
-          <div className="toolbar">
-            <div className="search-box">
-              <input
-                type="search"
-                placeholder="Search by name, email or student ID..."
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-              />
-            </div>
+              {!showAnalytics && <div id="analytics" />}
 
-            <div className="filter-box">
-              <select
-                value={batchFilter}
-                onChange={(event) => setBatchFilter(event.target.value)}
-              >
-                <option value="">All Batches</option>
-                {batches.map((batch) => (
-                  <option key={batch.batch_id} value={batch.batch_id}>
-                    {batch.batch_name}
-                  </option>
-                ))}
-              </select>
-            </div>
+              {/* Add / Edit Student */}
+              <section className="content-card" id="student-form">
+                <div className="section-heading">
+                  <div>
+                    <h2>
+                      {editingId !== null
+                        ? "Edit Student"
+                        : "Add New Student"}
+                    </h2>
+                    <p>
+                      {editingId !== null
+                        ? `Updating student ID: ${editingId}`
+                        : "Enter the student information below"}
+                    </p>
+                  </div>
+                </div>
 
-            <button
-              type="button"
-              className="clear-filter-button"
-              onClick={() => {
-                setSearchTerm("");
-                setBatchFilter("");
-              }}
-            >
-              Clear Filters
-            </button>
-          </div>
-
-          {/* Students Table */}
-          <div className="table-container">
-            <table>
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Student Name</th>
-                  <th>Email</th>
-                  <th>Phone</th>
-                  <th>Batch</th>
-                  <th>Qualification</th>
-                  <th>Location</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan="8" className="table-message">
-                      Loading student records...
-                    </td>
-                  </tr>
-                ) : filteredStudents.length === 0 ? (
-                  <tr>
-                    <td colSpan="8" className="table-message">
-                      No student records found.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredStudents.map((student) => (
-                    <tr key={student.student_id}>
-                      <td>{student.student_id}</td>
-
-                      <td className="student-name-cell">
-                        <button
-                          type="button"
-                          onClick={() => handleViewProfile(student)}
-                          style={{
-                            border: "none",
-                            background: "transparent",
-                            color: "#2563eb",
-                            fontWeight: 600,
-                            cursor: "pointer",
-                            padding: 0,
-                            fontSize: "inherit",
-                            textAlign: "left"
-                          }}
-                          title="View student profile"
+                <form onSubmit={handleSubmit} className="student-form">
+                  <div className="form-group">
+                    <label htmlFor="batch_id">Batch *</label>
+                    <select
+                      id="batch_id"
+                      name="batch_id"
+                      value={formData.batch_id}
+                      onChange={handleChange}
+                      required
+                    >
+                      <option value="">Select Batch</option>
+                      {batches.map((batch) => (
+                        <option
+                          key={batch.batch_id}
+                          value={batch.batch_id}
                         >
-                          {student.student_name}
-                        </button>
-                      </td>
+                          {batch.batch_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                      <td>{student.email}</td>
-                      <td>{student.phone}</td>
+                  <div className="form-group">
+                    <label htmlFor="student_name">Student Name *</label>
+                    <input
+                      id="student_name"
+                      name="student_name"
+                      value={formData.student_name}
+                      onChange={handleChange}
+                      placeholder="Enter student name"
+                      maxLength={100}
+                      required
+                    />
+                  </div>
 
-                      <td>
-                        <span className="batch-badge">
-                          {getBatchName(student.batch_id)}
-                        </span>
-                      </td>
+                  <div className="form-group">
+                    <label htmlFor="email">Email Address *</label>
+                    <input
+                      id="email"
+                      type="email"
+                      name="email"
+                      value={formData.email}
+                      onChange={handleChange}
+                      placeholder="Enter email address"
+                      maxLength={150}
+                      required
+                    />
+                  </div>
 
-                      <td>{student.qualification}</td>
-                      <td>{student.location}</td>
+                  <div className="form-group">
+                    <label htmlFor="phone">Phone Number *</label>
+                    <input
+                      id="phone"
+                      type="tel"
+                      name="phone"
+                      value={formData.phone}
+                      onChange={handleChange}
+                      placeholder="Enter phone number"
+                      maxLength={15}
+                      required
+                    />
+                  </div>
 
-                      <td>
-                        <div className="action-buttons">
-                          <button
-                            type="button"
-                            className="edit-button"
-                            onClick={() => handleEdit(student)}
-                          >
-                            Edit
-                          </button>
+                  <div className="form-group">
+                    <label htmlFor="qualification">Qualification *</label>
+                    <input
+                      id="qualification"
+                      name="qualification"
+                      value={formData.qualification}
+                      onChange={handleChange}
+                      placeholder="Example: B.Tech"
+                      maxLength={50}
+                      required
+                    />
+                  </div>
 
-                          <button
-                            type="button"
-                            className="delete-button"
-                            onClick={() => handleDelete(student)}
-                            disabled={deletingId === student.student_id}
-                          >
-                            {deletingId === student.student_id
-                              ? "Deleting..."
-                              : "Delete"}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  <div className="form-group">
+                    <label htmlFor="location">Location *</label>
+                    <input
+                      id="location"
+                      name="location"
+                      value={formData.location}
+                      onChange={handleChange}
+                      placeholder="Enter city"
+                      maxLength={100}
+                      required
+                    />
+                  </div>
 
-          <div className="table-footer">
-            Showing {filteredStudents.length} of {students.length} students
-          </div>
-        </section>
+                  <div className="form-actions">
+                    <button
+                      type="submit"
+                      className="primary-button"
+                      disabled={saving}
+                    >
+                      {saving
+                        ? "Please wait..."
+                        : editingId !== null
+                          ? "Update Student"
+                          : "Add Student"}
+                    </button>
 
-        <footer className="footer">
-          Student Management System
-        </footer>
-      </main>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={resetForm}
+                    >
+                      {editingId !== null ? "Cancel Edit" : "Clear Form"}
+                    </button>
+                  </div>
+                </form>
+              </section>
 
-      {/* Student Profile Modal */}
-      {selectedStudent && (
-        <div
-          onClick={handleCloseProfile}
-          style={{
-            position: "fixed",
-            inset: 0,
-            backgroundColor: "rgba(15, 23, 42, 0.65)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "20px",
-            zIndex: 1000
-          }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="profile-title"
-            onClick={(event) => event.stopPropagation()}
-            style={{
-              backgroundColor: "#ffffff",
-              width: "100%",
-              maxWidth: "480px",
-              borderRadius: "16px",
-              padding: "28px",
-              boxShadow: "0 20px 60px rgba(0,0,0,0.25)"
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: "22px"
-              }}
-            >
-              <div>
-                <h2
-                  id="profile-title"
-                  style={{ margin: 0, color: "#1e293b" }}
-                >
-                  Student Profile
-                </h2>
-                <p style={{ margin: "6px 0 0", color: "#64748b" }}>
-                  Student ID: {selectedStudent.student_id}
+              {/* Student Records */}
+              <section className="content-card" id="student-records">
+                <div className="section-heading">
+                  <div>
+                    <h2>Student Records</h2>
+                    <p>
+                      View, search, filter and manage student details
+                    </p>
+                  </div>
+                </div>
+
+                <div className="toolbar">
+                  <div className="search-box">
+                    <input
+                      type="search"
+                      placeholder="Search by name, email or student ID..."
+                      value={searchTerm}
+                      onChange={(event) =>
+                        setSearchTerm(event.target.value)
+                      }
+                    />
+                  </div>
+
+                  <div className="filter-box">
+                    <select
+                      value={batchFilter}
+                      onChange={(event) =>
+                        setBatchFilter(event.target.value)
+                      }
+                    >
+                      <option value="">All Batches</option>
+                      {batches.map((batch) => (
+                        <option
+                          key={batch.batch_id}
+                          value={batch.batch_id}
+                        >
+                          {batch.batch_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <button
+                    className="clear-filter-button"
+                    onClick={() => {
+                      setSearchTerm("");
+                      setBatchFilter("");
+                    }}
+                  >
+                    Clear Filters
+                  </button>
+                </div>
+
+                <div className="table-container">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Student Name</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>Batch</th>
+                        <th>Qualification</th>
+                        <th>Location</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+
+                    <tbody>
+                      {loading ? (
+                        <tr>
+                          <td colSpan="8" className="table-message">
+                            Loading student records...
+                          </td>
+                        </tr>
+                      ) : filteredStudents.length === 0 ? (
+                        <tr>
+                          <td colSpan="8" className="table-message">
+                            No student records found.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredStudents.map((student) => (
+                          <tr key={student.student_id}>
+                            <td>{student.student_id}</td>
+                            <td>
+                              <button
+                                className="profile-link"
+                                onClick={() =>
+                                  setSelectedStudent(student)
+                                }
+                              >
+                                {student.student_name}
+                              </button>
+                            </td>
+                            <td>{student.email}</td>
+                            <td>{student.phone}</td>
+                            <td>
+                              <span className="batch-badge">
+                                {getBatchName(student.batch_id)}
+                              </span>
+                            </td>
+                            <td>{student.qualification}</td>
+                            <td>{student.location}</td>
+                            <td>
+                              <div className="action-buttons">
+                                <button
+                                  className="edit-button"
+                                  onClick={() => handleEdit(student)}
+                                >
+                                  Edit
+                                </button>
+
+                                <button
+                                  className="delete-button"
+                                  onClick={() => handleDelete(student)}
+                                  disabled={
+                                    deletingId === student.student_id
+                                  }
+                                >
+                                  {deletingId === student.student_id
+                                    ? "Deleting..."
+                                    : "Delete"}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="table-footer">
+                  Showing {filteredStudents.length} of {students.length} students
+                </div>
+              </section>
+
+              <footer className="footer">
+                Student Management System
+              </footer>
+            </>
+          )}
+
+          {/* Separate Settings page */}
+          {activeSection === "settings" && (
+            <section className="content-card settings-section" id="settings">
+              <div className="section-heading">
+                <div>
+                  <h2>Settings</h2>
+                  <p>
+                    Customize your dashboard appearance and display
+                  </p>
+                </div>
+              </div>
+
+              <div className="settings-group">
+                <div className="settings-item">
+                  <div>
+                    <h3>Dark Mode</h3>
+                    <p>
+                      Switch between light and dark dashboard themes.
+                    </p>
+                  </div>
+
+                  <label className="settings-toggle">
+                    <input
+                      type="checkbox"
+                      checked={darkMode}
+                      onChange={(event) =>
+                        setDarkMode(event.target.checked)
+                      }
+                    />
+                    <span className="settings-toggle-slider" />
+                  </label>
+                </div>
+
+                <div className="settings-item">
+                  <div>
+                    <h3>Show Dashboard Statistics</h3>
+                    <p>
+                      Display total students, batches and filtered student count.
+                    </p>
+                  </div>
+
+                  <label className="settings-toggle">
+                    <input
+                      type="checkbox"
+                      checked={showStats}
+                      onChange={(event) =>
+                        setShowStats(event.target.checked)
+                      }
+                    />
+                    <span className="settings-toggle-slider" />
+                  </label>
+                </div>
+
+                <div className="settings-item">
+                  <div>
+                    <h3>Show Dashboard Analytics</h3>
+                    <p>
+                      Display batch, qualification and location charts.
+                    </p>
+                  </div>
+
+                  <label className="settings-toggle">
+                    <input
+                      type="checkbox"
+                      checked={showAnalytics}
+                      onChange={(event) =>
+                        setShowAnalytics(event.target.checked)
+                      }
+                    />
+                    <span className="settings-toggle-slider" />
+                  </label>
+                </div>
+              </div>
+
+              <div className="application-info">
+                <h3>Application Information</h3>
+
+                <p className="application-description">
+                  Student Management System is a web application for managing
+                  student records, batches and student distribution analytics.
+                </p>
+
+                <div className="application-info-grid">
+                  <div>
+                    <span>Frontend</span>
+                    <strong>React.js</strong>
+                  </div>
+
+                  <div>
+                    <span>Build Tool</span>
+                    <strong>Vite</strong>
+                  </div>
+
+                  <div>
+                    <span>Backend</span>
+                    <strong>Python · FastAPI</strong>
+                  </div>
+
+                  <div>
+                    <span>Database</span>
+                    <strong>Supabase · PostgreSQL</strong>
+                  </div>
+
+                  <div>
+                    <span>Database Toolkit</span>
+                    <strong>SQLAlchemy</strong>
+                  </div>
+
+                  <div>
+                    <span>Charts</span>
+                    <strong>Recharts</strong>
+                  </div>
+
+                  <div>
+                    <span>API Communication</span>
+                    <strong>Axios</strong>
+                  </div>
+                </div>
+
+                <p className="application-version">
+                  Student Management System · Dashboard
                 </p>
               </div>
 
+              <footer className="footer">
+                Student Management System
+              </footer>
+            </section>
+          )}
+        </main>
+      </div>
+
+      {/* Student Profile Popup */}
+      {selectedStudent && (
+        <div
+          className="profile-overlay"
+          onClick={() => setSelectedStudent(null)}
+        >
+          <div
+            className="profile-modal"
+            role="dialog"
+            aria-modal="true"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="profile-header">
+              <div>
+                <h2>Student Profile</h2>
+                <p>Student ID: {selectedStudent.student_id}</p>
+              </div>
+
               <button
-                type="button"
-                onClick={handleCloseProfile}
-                aria-label="Close student profile"
-                style={{
-                  border: "none",
-                  background: "#f1f5f9",
-                  borderRadius: "50%",
-                  width: "36px",
-                  height: "36px",
-                  fontSize: "22px",
-                  cursor: "pointer",
-                  color: "#334155"
-                }}
+                className="profile-close-button"
+                onClick={() => setSelectedStudent(null)}
               >
                 ×
               </button>
             </div>
 
-            <div
-              style={{
-                background: "#eff6ff",
-                borderRadius: "12px",
-                padding: "18px",
-                marginBottom: "20px",
-                textAlign: "center"
-              }}
-            >
-              <div
-                style={{
-                  width: "64px",
-                  height: "64px",
-                  borderRadius: "50%",
-                  background: "#2563eb",
-                  color: "#ffffff",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: "26px",
-                  fontWeight: 700,
-                  margin: "0 auto 12px"
-                }}
-              >
+            <div className="profile-summary">
+              <div className="profile-avatar">
                 {(selectedStudent.student_name || "?")
                   .trim()
                   .charAt(0)
                   .toUpperCase()}
               </div>
 
-              <h3 style={{ margin: 0, color: "#1e293b" }}>
-                {selectedStudent.student_name || "Not available"}
-              </h3>
-
-              <p style={{ margin: "6px 0 0", color: "#64748b" }}>
-                {getBatchName(selectedStudent.batch_id)}
-              </p>
+              <h3>{selectedStudent.student_name}</h3>
+              <p>{getBatchName(selectedStudent.batch_id)}</p>
             </div>
 
-            <div style={{ display: "grid", gap: "16px" }}>
+            <div className="profile-details">
               {[
                 ["Student ID", selectedStudent.student_id],
                 ["Email Address", selectedStudent.email],
@@ -862,55 +996,16 @@ function App() {
                 ["Qualification", selectedStudent.qualification],
                 ["Location", selectedStudent.location]
               ].map(([label, value]) => (
-                <div
-                  key={label}
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "4px",
-                    borderBottom: "1px solid #e2e8f0",
-                    paddingBottom: "10px"
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: "12px",
-                      color: "#64748b",
-                      fontWeight: 600,
-                      textTransform: "uppercase"
-                    }}
-                  >
-                    {label}
-                  </span>
-
-                  <span
-                    style={{
-                      fontSize: "15px",
-                      color: "#1e293b",
-                      overflowWrap: "anywhere"
-                    }}
-                  >
-                    {value || "Not available"}
-                  </span>
+                <div className="profile-detail" key={label}>
+                  <span>{label}</span>
+                  <strong>{value || "Not available"}</strong>
                 </div>
               ))}
             </div>
 
             <button
-              type="button"
-              onClick={handleCloseProfile}
-              style={{
-                width: "100%",
-                marginTop: "24px",
-                padding: "12px",
-                border: "none",
-                borderRadius: "8px",
-                background: "#2563eb",
-                color: "#ffffff",
-                fontWeight: 600,
-                cursor: "pointer",
-                fontSize: "14px"
-              }}
+              className="profile-done-button"
+              onClick={() => setSelectedStudent(null)}
             >
               Close Profile
             </button>
