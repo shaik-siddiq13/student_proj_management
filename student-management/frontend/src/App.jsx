@@ -5,16 +5,15 @@ import {
 } from "recharts";
 import {
   LayoutDashboard, BarChart3, UserPlus, Users, Settings as SettingsIcon,
-  GraduationCap, Layers, Eye, RefreshCw, Search, Download, X, Pencil,
-  Trash2, ChevronLeft, ChevronRight, ArrowUpDown, ArrowUp, ArrowDown,
-  CheckCircle2, AlertCircle, Menu, Inbox
+  GraduationCap, Layers, ListFilter, RefreshCw, Download, Pencil, Trash2,
+  X, Search, SearchX, ArrowUp, ArrowDown
 } from "lucide-react";
 
 import "./App.css";
 import API from "./api";
 
 const COLORS = [
-  "#1F8A6B", "#3977D5", "#F0A33B", "#8B5CF6",
+  "#3977D5", "#20A780", "#F0A33B", "#8B5CF6",
   "#E35D6A", "#06B6D4", "#EC4899", "#64748B"
 ];
 
@@ -25,33 +24,23 @@ const QUALIFICATIONS = [
 const PAGE_SIZE = 8;
 
 const emptyForm = {
-  batch_id: "",
-  student_name: "",
-  email: "",
-  phone: "",
-  qualification: "",
-  location: ""
+  batch_id: "", student_name: "", email: "",
+  phone: "", qualification: "", location: ""
 };
 
+const simplify = (v) => v.toLowerCase().replace(/[.\s]/g, "");
+
+// Merges "Btech", "b.tech", "B.tech" into "B.Tech"
 const normalizeQualification = (value) => {
   const raw = (value || "").trim();
   if (!raw) return "Not specified";
-  const key = raw.toLowerCase().replace(/[.\s]/g, "");
-  const match = QUALIFICATIONS.find(
-    (option) => option.toLowerCase().replace(/[.\s]/g, "") === key
-  );
+  const match = QUALIFICATIONS.find((q) => simplify(q) === simplify(raw));
   return match || raw;
 };
 
-const initialsOf = (name) =>
-  (name || "?")
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part.charAt(0).toUpperCase())
-    .join("");
-
-const avatarColor = (id) => COLORS[Math.abs(Number(id) || 0) % COLORS.length];
+const initials = (name) =>
+  (name || "?").trim().split(/\s+/).slice(0, 2)
+    .map((w) => w.charAt(0).toUpperCase()).join("");
 
 function AnalyticsCard({ title, data, type, color }) {
   const chartData = data.filter((item) => item.count > 0);
@@ -68,23 +57,16 @@ function AnalyticsCard({ title, data, type, color }) {
       </div>
 
       {chartData.length === 0 ? (
-        <div className="no-chart-data">No data available yet.</div>
+        <div className="no-chart-data">No data available.</div>
       ) : (
         <div className="chart-container">
           <ResponsiveContainer width="100%" height="100%">
             {type === "pie" ? (
               <PieChart>
                 <Pie
-                  data={chartData}
-                  dataKey="count"
-                  nameKey="name"
-                  cx="50%"
-                  cy="44%"
-                  innerRadius={62}
-                  outerRadius={98}
-                  paddingAngle={4}
-                  cornerRadius={5}
-                  stroke="none"
+                  data={chartData} dataKey="count" nameKey="name"
+                  cx="50%" cy="44%" innerRadius={62} outerRadius={98}
+                  paddingAngle={4} cornerRadius={5} stroke="none"
                 >
                   {chartData.map((item, index) => (
                     <Cell key={item.name} fill={COLORS[index % COLORS.length]} />
@@ -92,42 +74,31 @@ function AnalyticsCard({ title, data, type, color }) {
                 </Pie>
                 <Tooltip formatter={(value, name) => [`${value} students`, name]} />
                 <Legend
-                  verticalAlign="bottom"
-                  iconType="circle"
+                  verticalAlign="bottom" iconType="circle"
                   wrapperStyle={{ fontSize: "12px", paddingTop: "15px" }}
                 />
               </PieChart>
             ) : (
               <BarChart
-                data={chartData}
-                layout="vertical"
+                data={chartData} layout="vertical"
                 margin={{ top: 8, right: 25, left: 12, bottom: 8 }}
                 barCategoryGap="25%"
               >
                 <CartesianGrid stroke="#e9eef5" horizontal={false} />
                 <XAxis
-                  type="number"
-                  allowDecimals={false}
-                  axisLine={false}
-                  tickLine={false}
+                  type="number" allowDecimals={false}
+                  axisLine={false} tickLine={false}
                   tick={{ fill: "#64748b", fontSize: 12 }}
                 />
                 <YAxis
-                  type="category"
-                  dataKey="name"
-                  width={105}
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "#64748b", fontSize: 12 }}
+                  type="category" dataKey="name" width={105}
+                  axisLine={false} tickLine={false}
+                  tick={{ fill: "#334155", fontSize: 12 }}
                 />
                 <Tooltip formatter={(value) => [`${value} students`, "Students"]} />
                 <Bar
-                  dataKey="count"
-                  name="Students"
-                  fill={color}
-                  radius={[0, 8, 8, 0]}
-                  barSize={20}
-                  label={{ position: "right", fill: "#64748b", fontSize: 12 }}
+                  dataKey="count" name="Students" fill={color}
+                  radius={[0, 8, 8, 0]} barSize={20}
                 />
               </BarChart>
             )}
@@ -146,18 +117,17 @@ function App() {
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [batchFilter, setBatchFilter] = useState("");
-  const [qualFilter, setQualFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [activeSection, setActiveSection] = useState("dashboard");
-  const [menuOpen, setMenuOpen] = useState(false);
-
-  const [sortKey, setSortKey] = useState("student_id");
-  const [sortDir, setSortDir] = useState("asc");
   const [page, setPage] = useState(1);
+  const [qualFilter, setQualFilter] = useState("");
+  const [locationFilter, setLocationFilter] = useState("");
+  const [sort, setSort] = useState({ key: "student_id", dir: "asc" });
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const [darkMode, setDarkMode] = useState(
     () => localStorage.getItem("darkMode") === "true"
@@ -165,18 +135,13 @@ function App() {
   const [showStats, setShowStats] = useState(true);
   const [showAnalytics, setShowAnalytics] = useState(true);
 
-  useEffect(() => {
-    loadInitialData();
-  }, []);
+  useEffect(() => { loadInitialData(); }, []);
 
   useEffect(() => {
-    try {
-      localStorage.setItem("darkMode", String(darkMode));
-    } catch {
-      /* ignore storage errors */
-    }
+    try { localStorage.setItem("darkMode", String(darkMode)); } catch { /* ignore */ }
   }, [darkMode]);
 
+  // Messages disappear by themselves
   useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(""), 4000);
@@ -184,8 +149,21 @@ function App() {
   }, [notice]);
 
   useEffect(() => {
-    setPage(1);
-  }, [searchTerm, batchFilter, qualFilter, sortKey, sortDir]);
+    if (!error) return;
+    const timer = setTimeout(() => setError(""), 7000);
+    return () => clearTimeout(timer);
+  }, [error]);
+
+  useEffect(() => { setPage(1); }, [searchTerm, batchFilter, qualFilter, locationFilter]);
+
+  // Escape closes any open popup
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") { setDeleteTarget(null); setSelectedStudent(null); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const loadInitialData = async () => {
     setLoading(true);
@@ -199,7 +177,7 @@ function App() {
       setBatches(batchResponse.data);
     } catch (err) {
       console.error("Error loading data:", err);
-      setError("Unable to load data. Check that the backend is running and try again.");
+      setError("Unable to load data. Please check your backend connection.");
     } finally {
       setLoading(false);
     }
@@ -232,7 +210,7 @@ function App() {
     try {
       if (editingId !== null) {
         await API.put(`/students/${editingId}`, studentData);
-        setNotice("Student updated.");
+        setNotice("Student details updated.");
       } else {
         await API.post("/students", studentData);
         setNotice("Student added.");
@@ -245,7 +223,7 @@ function App() {
       setError(
         typeof message === "string"
           ? message
-          : "Could not save the student. Check the details and try again."
+          : "Unable to save student details. Please try again."
       );
     } finally {
       setSaving(false);
@@ -270,11 +248,7 @@ function App() {
   };
 
   const handleDelete = async (student) => {
-    const confirmed = window.confirm(
-      `Delete ${student.student_name}? This cannot be undone.`
-    );
-    if (!confirmed) return;
-
+    setDeleteTarget(null);
     setDeletingId(student.student_id);
     setError("");
     setNotice("");
@@ -287,8 +261,7 @@ function App() {
     } catch (err) {
       console.error("Error deleting student:", err);
       setError(
-        err.response?.data?.detail ||
-          "Could not delete the student. Try again."
+        err.response?.data?.detail || "Unable to delete student. Please try again."
       );
     } finally {
       setDeletingId(null);
@@ -296,84 +269,70 @@ function App() {
   };
 
   const getBatchName = (batchId) => {
-    const batch = batches.find(
-      (item) => String(item.batch_id) === String(batchId)
-    );
-    return batch ? batch.batch_name : "No batch";
+    const batch = batches.find((item) => String(item.batch_id) === String(batchId));
+    return batch ? batch.batch_name : batchId ? `Batch ${batchId}` : "No batch";
   };
 
   const navigateTo = (section) => {
     setActiveSection(section);
-    setMenuOpen(false);
-
-    if (section === "student-form" && editingId === null) {
-      setFormData(emptyForm);
-    }
-
+    if (section === "student-form" && editingId === null) setFormData(emptyForm);
     window.scrollTo({ top: 0, behavior: "smooth" });
-
     if (section !== "settings") {
       setTimeout(() => {
-        document
-          .getElementById(section)
-          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+        document.getElementById(section)?.scrollIntoView({
+          behavior: "smooth", block: "start"
+        });
       }, 100);
     }
   };
 
-  const handleSort = (key) => {
-    if (sortKey === key) {
-      setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
-  };
-
-  const qualificationOptions = useMemo(() => {
-    const set = new Set(QUALIFICATIONS);
-    students.forEach((s) => {
-      if (s.qualification) set.add(normalizeQualification(s.qualification));
-    });
-    return [...set];
-  }, [students]);
-
   const filteredStudents = useMemo(() => {
     const search = searchTerm.toLowerCase().trim();
-
-    const list = students.filter((student) => {
+    return students.filter((student) => {
       const matchesSearch =
         !search ||
         String(student.student_id).includes(search) ||
         (student.student_name || "").toLowerCase().includes(search) ||
         (student.email || "").toLowerCase().includes(search) ||
         (student.location || "").toLowerCase().includes(search);
-
-      const matchesBatch =
-        !batchFilter || String(student.batch_id) === batchFilter;
-
+      const matchesBatch = !batchFilter || String(student.batch_id) === batchFilter;
       const matchesQual =
-        !qualFilter ||
-        normalizeQualification(student.qualification) === qualFilter;
-
-      return matchesSearch && matchesBatch && matchesQual;
+        !qualFilter || normalizeQualification(student.qualification) === qualFilter;
+      const matchesLoc =
+        !locationFilter || (student.location || "").trim() === locationFilter;
+      return matchesSearch && matchesBatch && matchesQual && matchesLoc;
+    }).sort((a, b) => {
+      const val = (st) =>
+        sort.key === "batch" ? getBatchName(st.batch_id)
+        : sort.key === "qualification" ? normalizeQualification(st.qualification)
+        : st[sort.key];
+      const x = val(a) ?? "";
+      const y = val(b) ?? "";
+      const cmp = typeof x === "number" && typeof y === "number"
+        ? x - y
+        : String(x).localeCompare(String(y), undefined, { numeric: true, sensitivity: "base" });
+      return sort.dir === "asc" ? cmp : -cmp;
     });
+  }, [students, batches, searchTerm, batchFilter, qualFilter, locationFilter, sort]);
 
-    const valueOf = (student) => {
-      if (sortKey === "batch_id") return getBatchName(student.batch_id).toLowerCase();
-      if (sortKey === "student_id") return Number(student.student_id);
-      return String(student[sortKey] || "").toLowerCase();
-    };
+  const locationOptions = useMemo(
+    () => [...new Set(students.map((s) => (s.location || "").trim()).filter(Boolean))].sort(),
+    [students]
+  );
 
-    return [...list].sort((a, b) => {
-      const x = valueOf(a);
-      const y = valueOf(b);
-      if (x < y) return sortDir === "asc" ? -1 : 1;
-      if (x > y) return sortDir === "asc" ? 1 : -1;
-      return 0;
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [students, batches, searchTerm, batchFilter, qualFilter, sortKey, sortDir]);
+  const toggleSort = (key) =>
+    setSort((p) => p.key === key
+      ? { key, dir: p.dir === "asc" ? "desc" : "asc" }
+      : { key, dir: "asc" });
+
+  const sortHead = (key, label) => (
+    <th aria-sort={sort.key === key ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}>
+      <button className="sort-button" onClick={() => toggleSort(key)}>
+        {label}
+        {sort.key === key && (sort.dir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
+      </button>
+    </th>
+  );
 
   const totalPages = Math.max(1, Math.ceil(filteredStudents.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -382,106 +341,73 @@ function App() {
     currentPage * PAGE_SIZE
   );
 
-  const studentsByBatch = useMemo(() => {
-    const list = batches.map((batch) => ({
-      name: batch.batch_name,
-      count: students.filter(
-        (student) => String(student.batch_id) === String(batch.batch_id)
-      ).length
-    }));
-
-    const unassigned = students.filter(
-      (student) =>
-        !batches.some((b) => String(b.batch_id) === String(student.batch_id))
-    ).length;
-
-    return unassigned > 0 ? [...list, { name: "No batch", count: unassigned }] : list;
-  }, [students, batches]);
-
-  const countBy = (getName) => {
-    const counts = {};
-    students.forEach((student) => {
-      const name = getName(student);
-      counts[name] = (counts[name] || 0) + 1;
-    });
-    return Object.entries(counts).map(([name, count]) => ({ name, count }));
-  };
-
-  const studentsByQualification = useMemo(
-    () => countBy((s) => normalizeQualification(s.qualification)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [students]
-  );
-
-  const studentsByLocation = useMemo(
-    () =>
-      countBy((s) => {
-        const raw = s.location?.trim();
-        if (!raw) return "Not specified";
-        return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
-      }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [students]
-  );
-
   const exportCSV = () => {
     const header = ["ID", "Name", "Email", "Phone", "Batch", "Qualification", "Location"];
     const rows = filteredStudents.map((s) => [
       s.student_id, s.student_name, s.email, s.phone,
-      getBatchName(s.batch_id), normalizeQualification(s.qualification), s.location
+      getBatchName(s.batch_id), s.qualification, s.location
     ]);
     const csv = [header, ...rows]
       .map((row) =>
         row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(",")
       )
       .join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
     const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
+    link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
     link.download = "students.csv";
     link.click();
     URL.revokeObjectURL(link.href);
   };
 
-  const clearFilters = () => {
-    setSearchTerm("");
-    setBatchFilter("");
-    setQualFilter("");
-  };
+  const studentsByBatch = useMemo(() => {
+    const list = batches.map((batch) => ({
+      name: batch.batch_name,
+      count: students.filter(
+        (s) => String(s.batch_id) === String(batch.batch_id)
+      ).length
+    }));
+    const unassigned = students.filter(
+      (s) => !batches.some((b) => String(b.batch_id) === String(s.batch_id))
+    ).length;
+    return unassigned > 0 ? [...list, { name: "No batch", count: unassigned }] : list;
+  }, [students, batches]);
+
+  const studentsByQualification = useMemo(() => {
+    const counts = {};
+    students.forEach((s) => {
+      const name = normalizeQualification(s.qualification);
+      counts[name] = (counts[name] || 0) + 1;
+    });
+    return Object.entries(counts).map(([name, count]) => ({ name, count }));
+  }, [students]);
+
+  const studentsByLocation = useMemo(() => {
+    const counts = {};
+    students.forEach((s) => {
+      const name = s.location?.trim() || "Not specified";
+      counts[name] = (counts[name] || 0) + 1;
+    });
+    return Object.entries(counts).map(([name, count]) => ({ name, count }));
+  }, [students]);
 
   const navItems = [
-    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { id: "analytics", label: "Analytics", icon: BarChart3 },
-    { id: "student-form", label: "Add Student", icon: UserPlus },
-    { id: "student-records", label: "Student Records", icon: Users }
+    ["dashboard", "Dashboard", LayoutDashboard],
+    ["analytics", "Analytics", BarChart3],
+    ["student-form", "Add Student", UserPlus],
+    ["student-records", "Student Records", Users]
   ];
 
-  const SortHeader = ({ label, field }) => {
-    const Icon =
-      sortKey !== field ? ArrowUpDown : sortDir === "asc" ? ArrowUp : ArrowDown;
-    return (
-      <th>
-        <button className="sort-button" onClick={() => handleSort(field)}>
-          {label} <Icon size={13} />
-        </button>
-      </th>
-    );
-  };
-
-  const qualificationChoices = [
+  const qualificationOptions = [
     ...QUALIFICATIONS,
     ...(formData.qualification && !QUALIFICATIONS.includes(formData.qualification)
-      ? [formData.qualification]
-      : [])
+      ? [formData.qualification] : [])
   ];
 
   return (
     <div className={`app-container ${darkMode ? "dark-mode" : ""}`}>
-      {menuOpen && <div className="sidebar-backdrop" onClick={() => setMenuOpen(false)} />}
-
-      <aside className={`sidebar ${menuOpen ? "open" : ""}`}>
+      <aside className="sidebar">
         <div className="sidebar-brand">
-          <div className="brand-icon"><GraduationCap size={20} /></div>
+          <div className="brand-icon"><GraduationCap size={22} /></div>
           <div>
             <h2>Student Portal</h2>
             <p>Management System</p>
@@ -490,8 +416,7 @@ function App() {
 
         <nav className="sidebar-menu">
           <p className="sidebar-label">Main menu</p>
-
-          {navItems.map(({ id, label, icon: Icon }) => (
+          {navItems.map(([id, label, Icon]) => (
             <button
               key={id}
               className={activeSection === id ? "nav-item active" : "nav-item"}
@@ -502,7 +427,6 @@ function App() {
           ))}
 
           <p className="sidebar-label secondary-label">Preferences</p>
-
           <button
             className={activeSection === "settings" ? "nav-item active" : "nav-item"}
             onClick={() => navigateTo("settings")}
@@ -512,29 +436,21 @@ function App() {
         </nav>
 
         <div className="sidebar-footer">
-          <div className="sidebar-footer-icon">A</div>
+          <div className="sidebar-footer-icon"><GraduationCap size={18} /></div>
           <div>
-            <strong>Admin</strong>
-            <span>Dashboard access</span>
+            <strong>Student Records</strong>
+            <span>Batches &amp; analytics</span>
           </div>
         </div>
       </aside>
 
       <div className="dashboard-content">
         <header className="header">
-          <button
-            className="menu-button"
-            aria-label="Open menu"
-            onClick={() => setMenuOpen(true)}
-          >
-            <Menu size={20} />
-          </button>
-
-          <div className="header-text">
-            <h1>{activeSection === "settings" ? "Settings" : "Student Management"}</h1>
+          <div>
+            <h1>{activeSection === "settings" ? "Settings" : "Student Management System"}</h1>
             <p>
               {activeSection === "settings"
-                ? "Customize how the dashboard looks"
+                ? "Customize your application preferences"
                 : "Manage and track student information"}
             </p>
           </div>
@@ -548,83 +464,66 @@ function App() {
         </header>
 
         <main className="main-content">
-          <div className="toast-area" aria-live="polite">
+          <div className="toast-stack">
             {error && (
-              <div className="toast error-toast">
-                <AlertCircle size={18} />
+              <div className="alert error-alert" role="alert">
                 <span>{error}</span>
-                <button aria-label="Dismiss" onClick={() => setError("")}><X size={16} /></button>
+                <button onClick={() => setError("")} aria-label="Dismiss"><X size={16} /></button>
               </div>
             )}
             {notice && (
-              <div className="toast success-toast">
-                <CheckCircle2 size={18} />
+              <div className="alert success-alert" role="status">
                 <span>{notice}</span>
-                <button aria-label="Dismiss" onClick={() => setNotice("")}><X size={16} /></button>
+                <button onClick={() => setNotice("")} aria-label="Dismiss"><X size={16} /></button>
               </div>
             )}
           </div>
 
           {activeSection !== "settings" && (
             <>
-              {showStats ? (
+              {showStats && (
                 <section className="stats-grid" id="dashboard">
                   <div className="stat-card">
                     <div className="stat-icon blue"><Users size={22} /></div>
-                    <div>
-                      <p>Total students</p>
-                      <h2>{students.length}</h2>
-                    </div>
+                    <div><p>Total students</p><h2>{students.length}</h2></div>
                   </div>
-
                   <div className="stat-card">
                     <div className="stat-icon purple"><Layers size={22} /></div>
-                    <div>
-                      <p>Total batches</p>
-                      <h2>{batches.length}</h2>
-                    </div>
+                    <div><p>Total batches</p><h2>{batches.length}</h2></div>
                   </div>
-
                   <div className="stat-card">
-                    <div className="stat-icon green"><Eye size={22} /></div>
-                    <div>
-                      <p>Displayed students</p>
-                      <h2>{filteredStudents.length}</h2>
-                    </div>
+                    <div className="stat-icon green"><ListFilter size={22} /></div>
+                    <div><p>Displayed students</p><h2>{filteredStudents.length}</h2></div>
                   </div>
                 </section>
-              ) : (
-                <div id="dashboard" />
               )}
+              {!showStats && <div id="dashboard" />}
 
-              {showAnalytics ? (
+              {showAnalytics && (
                 <section className="analytics-section" id="analytics">
-                  <div className="section-heading plain">
+                  <div className="section-heading">
                     <div>
-                      <h2>Analytics</h2>
-                      <p>Student distribution by batch, qualification and location</p>
+                      <h2>Dashboard analytics</h2>
+                      <p>Insights into student distribution and demographics</p>
                     </div>
                   </div>
-
                   <div className="analytics-grid">
-                    <AnalyticsCard title="Students by batch" data={studentsByBatch} type="pie" color="#1F8A6B" />
+                    <AnalyticsCard title="Students by batch" data={studentsByBatch} type="pie" color="#3977D5" />
                     <AnalyticsCard title="Students by qualification" data={studentsByQualification} type="bar" color="#8B5CF6" />
-                    <AnalyticsCard title="Students by location" data={studentsByLocation} type="bar" color="#3977D5" />
+                    <AnalyticsCard title="Students by location" data={studentsByLocation} type="bar" color="#20A780" />
                   </div>
                 </section>
-              ) : (
-                <div id="analytics" />
               )}
+              {!showAnalytics && <div id="analytics" />}
 
-              {/* Add / Edit Student */}
               <section className="content-card" id="student-form">
                 <div className="section-heading">
                   <div>
                     <h2>{editingId !== null ? "Edit student" : "Add new student"}</h2>
                     <p>
                       {editingId !== null
-                        ? `Updating student ID ${editingId}`
-                        : "Enter the student's information below"}
+                        ? `Updating student ID: ${editingId}`
+                        : "Enter the student information below"}
                     </p>
                   </div>
                 </div>
@@ -635,9 +534,7 @@ function App() {
                     <select id="batch_id" name="batch_id" value={formData.batch_id} onChange={handleChange} required>
                       <option value="">Select batch</option>
                       {batches.map((batch) => (
-                        <option key={batch.batch_id} value={batch.batch_id}>
-                          {batch.batch_name}
-                        </option>
+                        <option key={batch.batch_id} value={batch.batch_id}>{batch.batch_name}</option>
                       ))}
                     </select>
                   </div>
@@ -645,7 +542,7 @@ function App() {
                   <div className="form-group">
                     <label htmlFor="student_name">Student name *</label>
                     <input id="student_name" name="student_name" value={formData.student_name}
-                      onChange={handleChange} placeholder="Full name" maxLength={100} required />
+                      onChange={handleChange} placeholder="Enter student name" maxLength={100} required />
                   </div>
 
                   <div className="form-group">
@@ -658,7 +555,7 @@ function App() {
                     <label htmlFor="phone">Phone number *</label>
                     <input id="phone" type="tel" name="phone" value={formData.phone}
                       onChange={handleChange} placeholder="10-digit number" maxLength={15}
-                      pattern="[0-9]{10}" title="Enter a 10-digit phone number" required />
+                      pattern="[0-9]{10,15}" title="Enter 10 to 15 digits" required />
                   </div>
 
                   <div className="form-group">
@@ -666,7 +563,7 @@ function App() {
                     <select id="qualification" name="qualification" value={formData.qualification}
                       onChange={handleChange} required>
                       <option value="">Select qualification</option>
-                      {qualificationChoices.map((option) => (
+                      {qualificationOptions.map((option) => (
                         <option key={option} value={option}>{option}</option>
                       ))}
                     </select>
@@ -675,12 +572,12 @@ function App() {
                   <div className="form-group">
                     <label htmlFor="location">Location *</label>
                     <input id="location" name="location" value={formData.location}
-                      onChange={handleChange} placeholder="City" maxLength={100} required />
+                      onChange={handleChange} placeholder="Enter city" maxLength={100} required />
                   </div>
 
                   <div className="form-actions">
                     <button type="submit" className="primary-button" disabled={saving}>
-                      {saving ? "Saving..." : editingId !== null ? "Save changes" : "Add student"}
+                      {saving ? "Please wait..." : editingId !== null ? "Update student" : "Add student"}
                     </button>
                     <button type="button" className="secondary-button" onClick={resetForm}>
                       {editingId !== null ? "Cancel edit" : "Clear form"}
@@ -689,17 +586,12 @@ function App() {
                 </form>
               </section>
 
-              {/* Student Records */}
               <section className="content-card" id="student-records">
                 <div className="section-heading">
                   <div>
                     <h2>Student records</h2>
-                    <p>Search, filter, sort and manage student details</p>
+                    <p>View, search, filter and manage student details</p>
                   </div>
-                  <button className="secondary-button compact" onClick={exportCSV}
-                    disabled={filteredStudents.length === 0}>
-                    <Download size={15} /> Export CSV
-                  </button>
                 </div>
 
                 <div className="toolbar">
@@ -709,55 +601,62 @@ function App() {
                       value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                   </div>
 
-                  <select value={batchFilter} onChange={(e) => setBatchFilter(e.target.value)}>
-                    <option value="">All batches</option>
-                    {batches.map((batch) => (
-                      <option key={batch.batch_id} value={batch.batch_id}>{batch.batch_name}</option>
-                    ))}
-                  </select>
+                  <div className="filter-box">
+                    <select value={batchFilter} onChange={(e) => setBatchFilter(e.target.value)}>
+                      <option value="">All batches</option>
+                      {batches.map((batch) => (
+                        <option key={batch.batch_id} value={batch.batch_id}>{batch.batch_name}</option>
+                      ))}
+                    </select>
+                  </div>
 
-                  <select value={qualFilter} onChange={(e) => setQualFilter(e.target.value)}>
-                    <option value="">All qualifications</option>
-                    {qualificationOptions.map((q) => (
-                      <option key={q} value={q}>{q}</option>
-                    ))}
-                  </select>
+                  <div className="filter-box">
+                    <select value={qualFilter} onChange={(e) => setQualFilter(e.target.value)}>
+                      <option value="">All qualifications</option>
+                      {QUALIFICATIONS.map((q) => <option key={q} value={q}>{q}</option>)}
+                    </select>
+                  </div>
 
-                  <button className="clear-filter-button" onClick={clearFilters}>Clear filters</button>
+                  <div className="filter-box">
+                    <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}>
+                      <option value="">All locations</option>
+                      {locationOptions.map((l) => <option key={l} value={l}>{l}</option>)}
+                    </select>
+                  </div>
+
+                  <button className="clear-filter-button" onClick={() => {
+                    setSearchTerm(""); setBatchFilter(""); setQualFilter(""); setLocationFilter("");
+                  }}>
+                    Clear filters
+                  </button>
+                  <button className="clear-filter-button" onClick={exportCSV} disabled={filteredStudents.length === 0}>
+                    <Download size={15} /> Export CSV
+                  </button>
                 </div>
 
                 <div className="table-container">
                   <table>
                     <thead>
                       <tr>
-                        <SortHeader label="ID" field="student_id" />
-                        <SortHeader label="Student" field="student_name" />
-                        <SortHeader label="Email" field="email" />
-                        <th>Phone</th>
-                        <SortHeader label="Batch" field="batch_id" />
-                        <SortHeader label="Qualification" field="qualification" />
-                        <SortHeader label="Location" field="location" />
-                        <th>Actions</th>
+                        {sortHead("student_id", "ID")}{sortHead("student_name", "Student")}
+                        {sortHead("email", "Email")}<th>Phone</th>
+                        {sortHead("batch", "Batch")}{sortHead("qualification", "Qualification")}
+                        {sortHead("location", "Location")}<th>Actions</th>
                       </tr>
                     </thead>
-
                     <tbody>
                       {loading ? (
                         Array.from({ length: 5 }).map((_, i) => (
-                          <tr key={i} className="skeleton-row">
-                            {Array.from({ length: 8 }).map((__, j) => (
-                              <td key={j}><span className="skeleton" /></td>
-                            ))}
+                          <tr key={i}>
+                            <td colSpan="8"><div className="skeleton" /></td>
                           </tr>
                         ))
-                      ) : pagedStudents.length === 0 ? (
+                      ) : filteredStudents.length === 0 ? (
                         <tr>
-                          <td colSpan="8">
-                            <div className="empty-state">
-                              <Inbox size={34} />
-                              <strong>No students found</strong>
-                              <span>Try a different search or clear the filters.</span>
-                            </div>
+                          <td colSpan="8" className="table-message">
+                            <SearchX size={28} />
+                            <strong>No students found</strong>
+                            <span>Try a different search, or add a new student above.</span>
                           </td>
                         </tr>
                       ) : (
@@ -765,26 +664,24 @@ function App() {
                           <tr key={student.student_id}>
                             <td>{student.student_id}</td>
                             <td>
-                              <button className="profile-link" onClick={() => setSelectedStudent(student)}>
-                                <span className="avatar" style={{ background: avatarColor(student.student_id) }}>
-                                  {initialsOf(student.student_name)}
-                                </span>
-                                {student.student_name}
-                              </button>
+                              <div className="name-cell">
+                                <span className="avatar">{initials(student.student_name)}</span>
+                                <button className="profile-link" onClick={() => setSelectedStudent(student)}>
+                                  {student.student_name}
+                                </button>
+                              </div>
                             </td>
                             <td>{student.email}</td>
                             <td>{student.phone}</td>
                             <td><span className="batch-badge">{getBatchName(student.batch_id)}</span></td>
-                            <td>{normalizeQualification(student.qualification)}</td>
+                            <td>{normalizeQualification(student.qualification) === "Not specified" ? "—" : normalizeQualification(student.qualification)}</td>
                             <td>{student.location}</td>
                             <td>
                               <div className="action-buttons">
-                                <button className="edit-button" aria-label={`Edit ${student.student_name}`}
-                                  onClick={() => handleEdit(student)}>
+                                <button className="edit-button" onClick={() => handleEdit(student)}>
                                   <Pencil size={14} /> Edit
                                 </button>
-                                <button className="delete-button" aria-label={`Delete ${student.student_name}`}
-                                  onClick={() => handleDelete(student)}
+                                <button className="delete-button" onClick={() => setDeleteTarget(student)}
                                   disabled={deletingId === student.student_id}>
                                   <Trash2 size={14} />
                                   {deletingId === student.student_id ? "Deleting..." : "Delete"}
@@ -799,20 +696,11 @@ function App() {
                 </div>
 
                 <div className="table-footer">
-                  <span>
-                    Showing {pagedStudents.length} of {filteredStudents.length} students
-                    {filteredStudents.length !== students.length && ` (${students.length} total)`}
-                  </span>
+                  <span>Showing {pagedStudents.length} of {filteredStudents.length} students</span>
                   <div className="pagination">
-                    <button disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}
-                      aria-label="Previous page">
-                      <ChevronLeft size={16} />
-                    </button>
+                    <button disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>Previous</button>
                     <span>Page {currentPage} of {totalPages}</span>
-                    <button disabled={currentPage === totalPages} onClick={() => setPage(currentPage + 1)}
-                      aria-label="Next page">
-                      <ChevronRight size={16} />
-                    </button>
+                    <button disabled={currentPage === totalPages} onClick={() => setPage(currentPage + 1)}>Next</button>
                   </div>
                 </div>
               </section>
@@ -825,22 +713,19 @@ function App() {
             <section className="content-card settings-section" id="settings">
               <div className="section-heading">
                 <div>
-                  <h2>Appearance</h2>
-                  <p>Choose what the dashboard shows</p>
+                  <h2>Settings</h2>
+                  <p>Customize your dashboard appearance and display</p>
                 </div>
               </div>
 
               <div className="settings-group">
                 {[
                   ["Dark mode", "Switch between light and dark themes.", darkMode, setDarkMode],
-                  ["Show statistics", "Display total students, batches and the filtered count.", showStats, setShowStats],
-                  ["Show analytics", "Display the batch, qualification and location charts.", showAnalytics, setShowAnalytics]
+                  ["Show dashboard statistics", "Display total students, batches and filtered count.", showStats, setShowStats],
+                  ["Show dashboard analytics", "Display batch, qualification and location charts.", showAnalytics, setShowAnalytics]
                 ].map(([title, text, value, setter]) => (
                   <div className="settings-item" key={title}>
-                    <div>
-                      <h3>{title}</h3>
-                      <p>{text}</p>
-                    </div>
+                    <div><h3>{title}</h3><p>{text}</p></div>
                     <label className="settings-toggle">
                       <input type="checkbox" checked={value} onChange={(e) => setter(e.target.checked)} />
                       <span className="settings-toggle-slider" />
@@ -850,26 +735,18 @@ function App() {
               </div>
 
               <div className="application-info">
-                <h3>About this application</h3>
+                <h3>Application information</h3>
                 <p className="application-description">
-                  A web application for managing student records, batches and
-                  student distribution analytics.
+                  A web application for managing student records, batches and student distribution analytics.
                 </p>
-
                 <div className="application-info-grid">
                   {[
-                    ["Frontend", "React"],
-                    ["Build tool", "Vite"],
-                    ["Backend", "Python, FastAPI"],
-                    ["Database", "Supabase, PostgreSQL"],
-                    ["Database toolkit", "SQLAlchemy"],
-                    ["Charts", "Recharts"],
-                    ["API client", "Axios"]
+                    ["Frontend", "React.js"], ["Build tool", "Vite"],
+                    ["Backend", "Python, FastAPI"], ["Database", "Supabase (PostgreSQL)"],
+                    ["Database toolkit", "SQLAlchemy"], ["Charts", "Recharts"],
+                    ["API communication", "Axios"]
                   ].map(([label, value]) => (
-                    <div key={label}>
-                      <span>{label}</span>
-                      <strong>{value}</strong>
-                    </div>
+                    <div key={label}><span>{label}</span><strong>{value}</strong></div>
                   ))}
                 </div>
               </div>
@@ -880,24 +757,38 @@ function App() {
         </main>
       </div>
 
+      {deleteTarget && (
+        <div className="profile-overlay" onClick={() => setDeleteTarget(null)}>
+          <div className="profile-modal confirm-modal" role="alertdialog" aria-modal="true"
+            onClick={(e) => e.stopPropagation()}>
+            <h2>Delete student?</h2>
+            <p>
+              This permanently removes <strong>{deleteTarget.student_name}</strong> from
+              the database. This cannot be undone.
+            </p>
+            <div className="confirm-actions">
+              <button className="secondary-button" onClick={() => setDeleteTarget(null)}>Cancel</button>
+              <button className="danger-button" onClick={() => handleDelete(deleteTarget)}>Delete student</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {selectedStudent && (
         <div className="profile-overlay" onClick={() => setSelectedStudent(null)}>
-          <div className="profile-modal" role="dialog" aria-modal="true"
-            onClick={(event) => event.stopPropagation()}>
+          <div className="profile-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
             <div className="profile-header">
               <div>
                 <h2>Student profile</h2>
-                <p>Student ID {selectedStudent.student_id}</p>
+                <p>Student ID: {selectedStudent.student_id}</p>
               </div>
-              <button className="profile-close-button" aria-label="Close" onClick={() => setSelectedStudent(null)}>
+              <button className="profile-close-button" onClick={() => setSelectedStudent(null)} aria-label="Close">
                 <X size={18} />
               </button>
             </div>
 
             <div className="profile-summary">
-              <div className="profile-avatar" style={{ background: avatarColor(selectedStudent.student_id) }}>
-                {initialsOf(selectedStudent.student_name)}
-              </div>
+              <div className="profile-avatar">{initials(selectedStudent.student_name)}</div>
               <h3>{selectedStudent.student_name}</h3>
               <p>{getBatchName(selectedStudent.batch_id)}</p>
             </div>
@@ -919,7 +810,7 @@ function App() {
             </div>
 
             <button className="profile-done-button" onClick={() => setSelectedStudent(null)}>
-              Close
+              Close profile
             </button>
           </div>
         </div>

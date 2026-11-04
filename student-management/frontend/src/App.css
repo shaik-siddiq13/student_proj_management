@@ -14,7 +14,9 @@
   --shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
 
   display: flex;
+  width: 100%;
   min-height: 100vh;
+  text-align: left;
   background: var(--bg);
   color: var(--text);
   font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -313,3 +315,20 @@ tbody tr:hover { background: var(--surface-2); }
 @media (prefers-reduced-motion: reduce) {
   .app-container * { animation: none !important; transition: none !important; }
 }
+
+/* ---------- Sorting & delete confirmation ---------- */
+.sort-button {
+  display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0;
+  background: none; color: inherit; font: inherit; font-weight: 600;
+}
+.sort-button:hover { color: var(--text); }
+.confirm-modal { max-width: 400px; }
+.confirm-modal h2 { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
+.confirm-modal p { color: var(--muted); }
+.confirm-modal strong { color: var(--text); }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+.danger-button {
+  padding: 9px 16px; border: 0; border-radius: 10px;
+  background: var(--danger); color: #fff; font-size: 13px; font-weight: 600;
+}
+.danger-button:hover { background: #b91c1c; }
